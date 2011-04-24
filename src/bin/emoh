@@ -46,6 +46,9 @@ export EXIT_SUCCESS=0;
 export EXIT_BADARGS=1;
 export EXIT_ERROR=2;
 
+export REPO=$HOME/.emoh/repo
+export GIT=/usr/bin/git
+
 # -----------------------------------------------------------------------
 # Utility Funcs
 # -----------------------------------------------------------------------
@@ -76,9 +79,47 @@ fatal()
   exit $EXIT_ERROR;
 }
 
+##
+# Sets up intial repository, if required
+#
+initcheck()
+{
+  if [ ! -r $REPO ];
+  then
+    initrepo;
+  fi
+}
+
+##
+# Setup initial repository
+#
+initrepo()
+{
+  mkdir -p $REPO
+  cd $REPO
+  $GIT init
+  echo repository created in: $REPO
+}
+
 # -----------------------------------------------------------------------
 # User Commands
 # -----------------------------------------------------------------------
+
+
+##
+# Provides direct git access to the repository
+#
+# @param $@
+# The stuff to pass to git
+#
+cmd_git()
+{
+  initcheck;
+
+  cd $REPO
+  $GIT "$@"
+}
+
 
 # -----------------------------------------------------------------------
 # Main
@@ -95,8 +136,14 @@ main()
   case $1 in
 
     # command: help
-    h*) 
+    h*)
       usage; exit $EXIT_SUCCESS
+      ;;
+
+    # command: help
+    git)
+      shift;
+      cmd_git "$@"
       ;;
 
     # command: <unknown>
@@ -108,5 +155,4 @@ main()
   esac
 }
 
-
-main $@;
+main "$@";
