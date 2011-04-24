@@ -42,9 +42,19 @@
 # >%<#>%<#>%<#>%<#>%<#>%<#>%<#>%<#>%<#>%<#>%<#>%<#>%<#>%<#>%<#>%<#>%<#>%<
 # -----------------------------------------------------------------------
 
+# -----------------------------------------------------------------------
+# Shell Configuration
+# -----------------------------------------------------------------------
+
+set -e # any error causes an exit
+set -u # accessing unset vars causes an error
+
+# -----------------------------------------------------------------------
+# Configuration
+# -----------------------------------------------------------------------
+
 export EXIT_SUCCESS=0;
-export EXIT_BADARGS=1;
-export EXIT_ERROR=2;
+export EXIT_ERROR=1;
 
 export REPO=$HOME/.emoh/repo
 export GIT=/usr/bin/git
@@ -80,13 +90,29 @@ fatal()
 }
 
 ##
+# TODO: docs
+#
+gitcheck()
+{
+  if [ ! -z "$(cmd_git status --porcelain)" ];
+  then
+    sed -e 's/      //' <<"    EOF"
+      There are changes in your local repository.
+      This may be cleared up with the "emoh git status" command and such.
+      At present there is no force flag to override this check, sorry.
+    EOF
+    fatal "Operation canceled."
+  fi
+}
+
+##
 # Sets up intial repository, if required
 #
 initcheck()
 {
   if [ ! -r $REPO ];
   then
-    initrepo;
+    fatal "emoh is not yet initialized."
   fi
 }
 
@@ -99,6 +125,107 @@ initrepo()
   cd $REPO
   $GIT init
   echo repository created in: $REPO
+}
+
+##
+# TODO: docs
+#
+relpath()
+{
+  echo -n $1 | sed "s!^$HOME/!!"
+}
+
+##
+# TODO: docs
+#
+backup_file()
+{
+  tmp=$(mktemp $1.orig.XXXXX)
+  cp $1 $tmp
+  echo -n $tmp
+}
+
+##
+# TODO: docs
+#
+managecheck()
+{
+  if [ -e "$REPO/$path" ];
+  then
+    fatal "$1 appears to be managed already as $REPO/$path."
+  fi
+}
+
+##
+# TODO: docs
+#
+manage()
+{
+  path=$(relpath $1)
+
+  managecheck $path;
+  initcheck;
+  gitcheck;
+
+  backup=$(backup_file $1)
+  targetdir="$REPO"/$(dirname "$path")
+
+  trap "manage_rollback \"$1\" \"$backup\" \"$targetdir\"" ERR
+
+  mkdir -p "$targetdir" 2> /dev/null || true
+  mv "$1" "$REPO/$path"
+  ln -s "$REPO/$path" "$HOME/$path"
+
+  trap - ERR
+
+  rm "$backup"
+  cmd_git add $path
+  cmd_git commit -q -m "now tracking $path"
+}
+
+##
+# TODO: docs
+#
+manage_rollback()
+{
+  echo An error occured while attempting to manage $1;
+
+  rmdir $3 2> /dev/null || true
+  mv $2 $1
+}
+
+##
+# TODO: docs
+#
+unmanagecheck()
+{
+  if [ -z "$2" ];
+  then
+    fatal "$1 appears not to be managed."
+  fi
+
+  location=$(readlink -fn $1)
+
+  if [ "$REPO/$path" != "$location" ];
+  then
+    fatal "$1 appears not to be managed."
+  fi
+}
+
+##
+# TODO: docs
+#
+unmanage()
+{
+  path=$(relpath $1)
+
+  unmanagecheck $1 $path;
+  initcheck;
+  gitcheck;
+
+  mv "$REPO/$path" $1
+  cmd_git rm "$REPO/$path"
+  cmd_git commit -q -m "no longer tracking $path"
 }
 
 # -----------------------------------------------------------------------
@@ -118,6 +245,32 @@ cmd_git()
 
   cd $REPO
   $GIT "$@"
+}
+
+
+##
+# Begin managing a file in the repository
+#
+# @param $1
+# The path to the file to begin managing
+#
+cmd_manage()
+{
+  initcheck;
+  manage "$1";
+}
+
+
+##
+# Stop managing a file
+#
+# @param $1
+# The path to the file to stop managing
+#
+cmd_unmanage()
+{
+  initcheck;
+  unmanage "$1";
 }
 
 
@@ -146,10 +299,20 @@ main()
       cmd_git "$@"
       ;;
 
+    # command: manage
+    manage)
+      cmd_manage "$2"
+      ;;
+
+    # command: unmanage
+    unmanage)
+      cmd_unmanage "$2"
+      ;;
+
     # command: <unknown>
     *)
       echo -e Error: Unknown argument $1 '\n';
-      usage; exit $EXIT_BADARGS
+      usage; exit $EXIT_ERROR;
       ;;
 
   esac
