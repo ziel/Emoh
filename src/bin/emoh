@@ -56,7 +56,7 @@ set -u # accessing unset vars causes an error
 export EXIT_SUCCESS=0;
 export EXIT_ERROR=1;
 
-export REPO=$HOME/.emoh/repo
+export REPO=${HOME}/.emoh/repo
 export GIT=/usr/bin/git
 
 # -----------------------------------------------------------------------
@@ -119,7 +119,7 @@ check_repo_unchanged()
 #
 check_repo_exists()
 {
-  if [ ! -r $REPO ]; then
+  if [ ! -r ${REPO} ]; then
     sed -e 's/      //' <<"    EOF"
       Emoh is not yet initialized.
       You may initialize an empty repository with
@@ -141,8 +141,8 @@ check_repo_exists()
 #
 check_file_ismanaged()
 {
-  if [ -e "$REPO/$path" ]; then
-    echo "$1 appears to be managed already as $REPO/$path."
+  if [ -e "${REPO}/${path}" ]; then
+    echo "$1 appears to be managed already as ${REPO}/${path}."
     fatal "Operation canceled."
   fi
 }
@@ -172,14 +172,14 @@ check_file_notmanaged()
 # -----------------------------------------------------------------------
 
 ##
-# Prints the relative path from $HOME for the given path
+# Prints the relative path from ${HOME} for the given path
 #
 # @param $1
 # The path to convert
 #
 relpath()
 {
-  echo -n $1 | sed "s!^$HOME/!!"
+  echo -n $1 | sed "s!^${HOME}/!!"
 }
 
 ##
@@ -192,8 +192,8 @@ relpath()
 backup_file()
 {
   tmp=$(mktemp $1.orig.XXXXX)
-  cp $1 $tmp
-  echo -n $tmp
+  cp $1 ${tmp}
+  echo -n ${tmp}
 }
 
 # -----------------------------------------------------------------------
@@ -205,10 +205,10 @@ backup_file()
 #
 init_new()
 {
-  mkdir -p $REPO
-  cd $REPO
-  $GIT init
-  echo repository created in: $REPO
+  mkdir -p ${REPO}
+  cd ${REPO}
+  ${GIT} init
+  echo repository created in: ${REPO}
 }
 
 ##
@@ -220,8 +220,8 @@ init_new()
 #
 init_clone()
 {
-  $GIT clone "$1" $REPO
-  echo repository created in: $REPO
+  ${GIT} clone "$1" ${REPO}
+  echo repository created in: ${REPO}
 }
 
 ##
@@ -243,24 +243,24 @@ manage()
 {
   path=$(relpath $1)
 
-  check_file_ismanaged $path;
+  check_file_ismanaged ${path};
   check_repo_exists;
   check_repo_unchanged;
 
   backup=$(backup_file $1)
-  targetdir="$REPO"/$(dirname "$path")
+  targetdir="${REPO}"/$(dirname "${path}")
 
-  trap "manage_rollback \"$1\" \"$backup\" \"$targetdir\"" ERR
+  trap "manage_rollback \"$1\" \"${backup}\" \"${targetdir}\"" ERR
 
-  mkdir -p "$targetdir" 2> /dev/null || true
-  mv "$1" "$REPO/$path"
-  ln -s "$REPO/$path" "$HOME/$path"
+  mkdir -p "${targetdir}" 2> /dev/null || true
+  mv "$1" "${REPO}/${path}"
+  ln -s "${REPO}/${path}" "${HOME}/${path}"
 
   trap - ERR
 
-  rm "$backup"
-  cmd_git add $path
-  cmd_git commit -q -m "emoh: now tracking $path"
+  rm "${backup}"
+  cmd_git add ${path}
+  cmd_git commit -q -m "emoh: now tracking ${path}"
 }
 
 ##
@@ -272,11 +272,11 @@ unmanage()
 
   check_repo_exists;
   check_repo_unchanged;
-  check_file_notmanaged "$1" "$REPO/$path";
+  check_file_notmanaged "$1" "${REPO}/${path}";
 
-  mv "$REPO/$path" "$1"
-  cmd_git rm -q "$REPO/$path"
-  cmd_git commit -q -m "emoh: no longer tracking $path"
+  mv "${REPO}/${path}" "$1"
+  cmd_git rm -q "${REPO}/${path}"
+  cmd_git commit -q -m "emoh: no longer tracking ${path}"
 }
 
 # -----------------------------------------------------------------------
@@ -286,15 +286,15 @@ unmanage()
 ##
 # Intialize the repository:
 # either clone from a remote source
-# to create a new repository in $REPO
+# to create a new repository in ${REPO}
 #
 # @param $1
 # (optional) remote repositoy to clone
 #
 cmd_init()
 {
-  if [ -e "$REPO" ]; then
-    fatal "A repository alreay exists at: $REPO. Aborting."
+  if [ -e "${REPO}" ]; then
+    fatal "A repository alreay exists at: ${REPO}. Aborting."
   fi
 
   if (( 0 < $# )); then
@@ -314,8 +314,8 @@ cmd_git()
 {
   check_repo_exists;
 
-  cd $REPO
-  $GIT "$@"
+  cd ${REPO}
+  ${GIT} "$@"
 }
 
 ##
@@ -356,14 +356,14 @@ cmd_unmanage()
 main()
 {
   if (( 0 == $# )); then
-    usage; exit $EXIT_ERROR;
+    usage; exit ${EXIT_ERROR};
   fi
 
   case $1 in
 
     # command: help
     h*)
-      usage; exit $EXIT_SUCCESS
+      usage; exit ${EXIT_SUCCESS}
       ;;
 
     # command: init
@@ -391,7 +391,7 @@ main()
     # command: <unknown>
     *)
       echo -e Error: Unknown argument $1 '\n';
-      usage; exit $EXIT_ERROR;
+      usage; exit ${EXIT_ERROR};
       ;;
 
   esac
