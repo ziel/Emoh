@@ -60,7 +60,7 @@ export REPO=$HOME/.emoh/repo
 export GIT=/usr/bin/git
 
 # -----------------------------------------------------------------------
-# Utility Funcs
+# Error Handling
 # -----------------------------------------------------------------------
 
 ##
@@ -89,16 +89,25 @@ fatal()
   exit $EXIT_ERROR;
 }
 
+# -----------------------------------------------------------------------
+# Sanity Checks
+# -----------------------------------------------------------------------
+
 ##
-# TODO: docs
+# Checks that the repository has no changes
 #
-gitcheck()
+check_repo_unchanged()
 {
-  if [ ! -z "$(cmd_git status --porcelain)" ];
-  then
+  if [ ! -z "$(cmd_git status --porcelain)" ]; then
     sed -e 's/      //' <<"    EOF"
       There are changes in your local repository.
-      This may be cleared up with the "emoh git status" command and such.
+      You may see the changes with
+        emoh git status
+
+      and commit or reset them with the standard git
+      commands via
+        emoh git <command>
+
       At present there is no force flag to override this check, sorry.
     EOF
     fatal "Operation canceled."
@@ -106,29 +115,67 @@ gitcheck()
 }
 
 ##
-# Sets up intial repository, if required
+# Checks that the repository has been intialized
 #
-initcheck()
+check_repo_exists()
 {
-  if [ ! -r $REPO ];
-  then
-    fatal "emoh is not yet initialized."
+  if [ ! -r $REPO ]; then
+    sed -e 's/      //' <<"    EOF"
+      Emoh is not yet initialized.
+      You may initialize an empty repository with
+        emoh init
+
+      or clone an existing repository with
+        emoh init url/for/repo.git
+
+    EOF
+    fatal "Operation canceled."
   fi
 }
 
 ##
-# Setup initial repository
+# Checks that a file is not presently managed
 #
-initrepo()
+# @param $1
+# The path to the file to check
+#
+check_file_ismanaged()
 {
-  mkdir -p $REPO
-  cd $REPO
-  $GIT init
-  echo repository created in: $REPO
+  if [ -e "$REPO/$path" ]; then
+    echo "$1 appears to be managed already as $REPO/$path."
+    fatal "Operation canceled."
+  fi
 }
 
 ##
-# TODO: docs
+# Checks that a file is _not_ presently managed
+#
+# @param $1
+# The path to the file to check
+#
+# @param $2
+# The path within the repo for the file to check
+#
+check_file_notmanaged()
+{
+  if [ -z "$2" ]; then
+    fatal "$1 appears not to be managed."
+  fi
+
+  if [ "$2" != $(readlink -fn $1) ]; then
+    fatal "$1 appears not to be managed."
+  fi
+}
+
+# -----------------------------------------------------------------------
+# Utility Functions
+# -----------------------------------------------------------------------
+
+##
+# Prints the relative path from $HOME for the given path
+#
+# @param $1
+# The path to convert
 #
 relpath()
 {
@@ -136,7 +183,11 @@ relpath()
 }
 
 ##
-# TODO: docs
+# Copies a file to a temporary backup and
+# prints the name of the new copy.
+#
+# @param $1
+# The file for which to create a backup
 #
 backup_file()
 {
@@ -145,15 +196,44 @@ backup_file()
   echo -n $tmp
 }
 
+# -----------------------------------------------------------------------
+# Operations
+# -----------------------------------------------------------------------
+
 ##
+# Sets up an initial (empty) repository
+#
+init_new()
+{
+  mkdir -p $REPO
+  cd $REPO
+  $GIT init
+  echo repository created in: $REPO
+}
+
+##
+# Clones an initial repository from a remote source
+#
+# @param $1
+# The url from which to clone,
+# ex: some/url/to/repo/.git
+#
+init_clone()
+{
+  $GIT clone "$1" $REPO
+  echo repository created in: $REPO
+}
+
+##
+# Rolls back a manage operation.
 # TODO: docs
 #
-managecheck()
+manage_rollback()
 {
-  if [ -e "$REPO/$path" ];
-  then
-    fatal "$1 appears to be managed already as $REPO/$path."
-  fi
+  echo An error occured while attempting to manage $1;
+
+  rmdir $3 2> /dev/null || true
+  mv $2 $1
 }
 
 ##
@@ -163,9 +243,9 @@ manage()
 {
   path=$(relpath $1)
 
-  managecheck $path;
-  initcheck;
-  gitcheck;
+  check_file_ismanaged $path;
+  check_repo_exists;
+  check_repo_unchanged;
 
   backup=$(backup_file $1)
   targetdir="$REPO"/$(dirname "$path")
@@ -180,36 +260,7 @@ manage()
 
   rm "$backup"
   cmd_git add $path
-  cmd_git commit -q -m "now tracking $path"
-}
-
-##
-# TODO: docs
-#
-manage_rollback()
-{
-  echo An error occured while attempting to manage $1;
-
-  rmdir $3 2> /dev/null || true
-  mv $2 $1
-}
-
-##
-# TODO: docs
-#
-unmanagecheck()
-{
-  if [ -z "$2" ];
-  then
-    fatal "$1 appears not to be managed."
-  fi
-
-  location=$(readlink -fn $1)
-
-  if [ "$REPO/$path" != "$location" ];
-  then
-    fatal "$1 appears not to be managed."
-  fi
+  cmd_git commit -q -m "emoh: now tracking $path"
 }
 
 ##
@@ -219,19 +270,39 @@ unmanage()
 {
   path=$(relpath $1)
 
-  unmanagecheck $1 $path;
-  initcheck;
-  gitcheck;
+  check_repo_exists;
+  check_repo_unchanged;
+  check_file_notmanaged "$1" "$REPO/$path";
 
-  mv "$REPO/$path" $1
-  cmd_git rm "$REPO/$path"
-  cmd_git commit -q -m "no longer tracking $path"
+  mv "$REPO/$path" "$1"
+  cmd_git rm -q "$REPO/$path"
+  cmd_git commit -q -m "emoh: no longer tracking $path"
 }
 
 # -----------------------------------------------------------------------
 # User Commands
 # -----------------------------------------------------------------------
 
+##
+# Intialize the repository:
+# either clone from a remote source
+# to create a new repository in $REPO
+#
+# @param $1
+# (optional) remote repositoy to clone
+#
+cmd_init()
+{
+  if [ -e "$REPO" ]; then
+    fatal "A repository alreay exists at: $REPO. Aborting."
+  fi
+
+  if (( 0 < $# )); then
+    init_clone "$1";
+  else
+    init_new;
+  fi
+}
 
 ##
 # Provides direct git access to the repository
@@ -241,12 +312,11 @@ unmanage()
 #
 cmd_git()
 {
-  initcheck;
+  check_repo_exists;
 
   cd $REPO
   $GIT "$@"
 }
-
 
 ##
 # Begin managing a file in the repository
@@ -256,10 +326,9 @@ cmd_git()
 #
 cmd_manage()
 {
-  initcheck;
+  check_repo_exists;
   manage "$1";
 }
-
 
 ##
 # Stop managing a file
@@ -269,7 +338,7 @@ cmd_manage()
 #
 cmd_unmanage()
 {
-  initcheck;
+  check_repo_exists;
   unmanage "$1";
 }
 
@@ -286,6 +355,10 @@ cmd_unmanage()
 #
 main()
 {
+  if (( 0 == $# )); then
+    usage; exit $EXIT_ERROR;
+  fi
+
   case $1 in
 
     # command: help
@@ -293,7 +366,13 @@ main()
       usage; exit $EXIT_SUCCESS
       ;;
 
-    # command: help
+    # command: init
+    init)
+      shift;
+      cmd_init "$@"
+      ;;
+
+    # command: git
     git)
       shift;
       cmd_git "$@"
