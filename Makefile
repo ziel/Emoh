@@ -16,6 +16,7 @@ install:
 	@mkdir -p ${BINDIR}
 	@mkdir -p ${MANDIR}
 	@cp ${SRC_BINDIR}/${BASENAME} ${BINDIR}
+	@chmod 755 ${BINDIR}/${BASENAME}
 	@echo Script installed in: ${BINDIR}
 	@cat ${SRC_MANDIR}/${BASENAME}.1 | gzip > ${MANDIR}/${BASENAME}.1.gz
 	@echo Man page installed in: ${MANDIR}
