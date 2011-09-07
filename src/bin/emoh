@@ -319,6 +319,19 @@ cmd_git()
 }
 
 ##
+# Sync local repository with remote
+# by pulling everything and then pushing everything.
+#
+cmd_sync()
+{
+  check_repo_exists;
+  check_repo_unchanged;
+
+  cmd_git fetch
+  cmd_git push
+}
+
+##
 # Begin managing a file in the repository
 #
 # @param $1
@@ -376,6 +389,11 @@ main()
     git)
       shift;
       cmd_git "$@"
+      ;;
+
+    # command: sync
+    sync)
+      cmd_sync
       ;;
 
     # command: manage
